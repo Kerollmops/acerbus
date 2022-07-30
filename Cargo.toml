@@ -1,0 +1,6 @@
+# This crate name comes from this latin dictionnary:
+# https://personal.math.ubc.ca/~cass/frivs/latin/latin-dict-full.html
+
+[workspace]
+members = ["acerbus-client", "acerbus-server", "acerbus-common"]
+resolver = "2"

@@ -1,0 +1,10 @@
+[package]
+name = "acerbus-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+acerbus-common = { path = "../acerbus-common" }
+bevy = { version = "0.7.0" }
+bevy_renet = "0.0.4"
+bincode = "1.3.3"
