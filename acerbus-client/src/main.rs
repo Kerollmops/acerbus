@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::net::UdpSocket;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use acerbus_common::{panic_on_error_system, Lobby, PlayerInput, ServerMessage, PROTOCOL_ID};
 use bevy::app::AppExit;
@@ -44,6 +44,9 @@ fn main() {
     app.add_system(player_input);
     app.add_system(client_send_input.with_run_criteria(run_if_client_conected));
     app.add_system(client_sync_players.with_run_criteria(run_if_client_conected));
+
+    app.insert_resource(LogRttConfig { timer: Timer::new(Duration::from_secs(5), true) });
+    app.add_system(log_rtt.with_run_criteria(run_if_client_conected));
 
     app.add_startup_system(setup);
     app.add_system_to_stage(CoreStage::PostUpdate, close_connection_exit_system);
@@ -115,5 +118,21 @@ fn client_send_input(player_input: Res<PlayerInput>, mut client: ResMut<RenetCli
 fn close_connection_exit_system(events: EventReader<AppExit>, mut client: ResMut<RenetClient>) {
     if !events.is_empty() {
         client.disconnect();
+    }
+}
+
+struct LogRttConfig {
+    /// How often to display the Round-Trip time (repeating timer)
+    timer: Timer,
+}
+
+/// Log the RTT in set intervals of time
+fn log_rtt(time: Res<Time>, client: Res<RenetClient>, mut config: ResMut<LogRttConfig>) {
+    // tick the timer
+    config.timer.tick(time.delta());
+
+    if config.timer.finished() {
+        let rtt = client.network_info().rtt;
+        eprintln!("UDP Round-trip time: {:0.02?}ms", rtt);
     }
 }
