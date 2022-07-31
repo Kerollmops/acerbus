@@ -1,8 +1,7 @@
-use std::collections::HashMap;
 use std::net::UdpSocket;
 use std::time::{Duration, SystemTime};
 
-use acerbus_common::{panic_on_error_system, Lobby, PlayerInput, ServerMessage, PROTOCOL_ID};
+use acerbus_common::*;
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use bevy_asset_loader::{AssetCollection, AssetCollectionApp};
@@ -15,21 +14,6 @@ struct GameAssets {
     icon_green: Handle<Image>,
     #[asset(path = "images/icon-purple.png")]
     icon_purple: Handle<Image>,
-}
-
-fn new_renet_client() -> RenetClient {
-    let server_addr = "127.0.0.1:5000".parse().unwrap();
-    let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
-    let connection_config = RenetConnectionConfig::default();
-    let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
-    let client_id = current_time.as_millis() as u64;
-    let authentication = ClientAuthentication::Unsecure {
-        client_id,
-        protocol_id: PROTOCOL_ID,
-        server_addr,
-        user_data: None,
-    };
-    RenetClient::new(current_time, socket, client_id, connection_config, authentication).unwrap()
 }
 
 fn main() {
@@ -55,17 +39,32 @@ fn main() {
     app.run();
 }
 
+fn new_renet_client() -> RenetClient {
+    let server_addr = "127.0.0.1:5000".parse().unwrap();
+    let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let connection_config = RenetConnectionConfig::default();
+    let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+    let client_id = current_time.as_millis() as u64;
+    let authentication = ClientAuthentication::Unsecure {
+        client_id,
+        protocol_id: PROTOCOL_ID,
+        server_addr,
+        user_data: None,
+    };
+    RenetClient::new(current_time, socket, client_id, connection_config, authentication).unwrap()
+}
+
 fn client_sync_players(
     mut commands: Commands,
     game_assets: Res<GameAssets>,
     mut client: ResMut<RenetClient>,
     mut lobby: ResMut<Lobby>,
 ) {
-    while let Some(message) = client.receive_message(0) {
+    while let Some(message) = client.receive_message(CONNECTION_EVENTS_CHANNEL) {
         let server_message = bincode::deserialize(&message).unwrap();
         match server_message {
-            ServerMessage::PlayerConnected { id } => {
-                println!("Player {} connected.", id);
+            ServerMessage::PlayerConnected { player } => {
+                println!("{:?} connected.", player);
                 let player_entity = commands
                     .spawn_bundle(SpriteBundle {
                         texture: game_assets.icon_green.clone(),
@@ -73,22 +72,22 @@ fn client_sync_players(
                     })
                     .id();
 
-                lobby.players.insert(id, player_entity);
+                lobby.players.insert(player, player_entity);
             }
-            ServerMessage::PlayerDisconnected { id } => {
-                println!("Player {} disconnected.", id);
-                if let Some(player_entity) = lobby.players.remove(&id) {
+            ServerMessage::PlayerDisconnected { player } => {
+                println!("{:?} disconnected.", player);
+                if let Some(player_entity) = lobby.players.remove(&player) {
                     commands.entity(player_entity).despawn();
                 }
             }
         }
     }
 
-    while let Some(message) = client.receive_message(1) {
-        let players: HashMap<u64, [f32; 3]> = bincode::deserialize(&message).unwrap();
-        for (player_id, translation) in players.iter() {
-            if let Some(player_entity) = lobby.players.get(player_id) {
-                let transform = Transform { translation: (*translation).into(), ..default() };
+    while let Some(message) = client.receive_message(WORLD_SYNC_CHANNEL) {
+        let world: WorldSync = bincode::deserialize(&message).unwrap();
+        for (player, translation) in world.players_positions.iter() {
+            if let Some(player_entity) = lobby.players.get(player) {
+                let transform = Transform { translation: translation.extend(0.), ..default() };
                 commands.entity(*player_entity).insert(transform);
             }
         }
@@ -111,7 +110,7 @@ fn player_input(keyboard_input: Res<Input<KeyCode>>, mut player_input: ResMut<Pl
 
 fn client_send_input(player_input: Res<PlayerInput>, mut client: ResMut<RenetClient>) {
     let input_message = bincode::serialize(&*player_input).unwrap();
-    client.send_message(0, input_message);
+    client.send_message(PLAYER_POSITION_CHANNEL, input_message);
 }
 
 /// Close the connection with the server when exiting the app.

@@ -1,12 +1,9 @@
-use std::collections::HashMap;
 use std::net::UdpSocket;
 use std::time::{Duration, SystemTime};
 
-use acerbus_common::{
-    panic_on_error_system, Lobby, Player, PlayerInput, ServerMessage, PLAYER_MOVE_SPEED,
-    PROTOCOL_ID,
-};
+use acerbus_common::*;
 use bevy::app::ScheduleRunnerSettings;
+use bevy::math::Vec3Swizzles;
 use bevy::prelude::*;
 use bevy_renet::renet::{
     RenetConnectionConfig, RenetServer, ServerAuthentication, ServerConfig, ServerEvent,
@@ -53,49 +50,55 @@ fn server_update_system(
     for event in server_events.iter() {
         match event {
             ServerEvent::ClientConnected(id, _) => {
-                println!("Player {} connected.", id);
+                let player = Player { id: *id };
+                println!("{:?} connected.", player);
+
                 // Spawn player cube
                 let player_entity = commands
                     .spawn()
                     .insert(Transform::default())
                     .insert(GlobalTransform::default())
                     .insert(PlayerInput::default())
-                    .insert(Player { id: *id })
+                    .insert(player)
                     .id();
 
                 // We could send an InitState with all the players id and positions for the client
                 // but this is easier to do.
-                for &player_id in lobby.players.keys() {
-                    let message =
-                        bincode::serialize(&ServerMessage::PlayerConnected { id: player_id })
-                            .unwrap();
-                    server.send_message(*id, 0, message);
+                for lobby_player in lobby.players.keys() {
+                    let message = bincode::serialize(&ServerMessage::PlayerConnected {
+                        player: *lobby_player,
+                    })
+                    .unwrap();
+                    server.send_message(player.id, CONNECTION_EVENTS_CHANNEL, message);
                 }
 
-                lobby.players.insert(*id, player_entity);
+                lobby.players.insert(player, player_entity);
 
                 let message =
-                    bincode::serialize(&ServerMessage::PlayerConnected { id: *id }).unwrap();
-                server.broadcast_message(0, message);
+                    bincode::serialize(&ServerMessage::PlayerConnected { player }).unwrap();
+                server.broadcast_message(CONNECTION_EVENTS_CHANNEL, message);
             }
             ServerEvent::ClientDisconnected(id) => {
-                println!("Player {} disconnected.", id);
-                if let Some(player_entity) = lobby.players.remove(id) {
+                let player = Player { id: *id };
+                println!("{:?} disconnected.", player);
+
+                if let Some(player_entity) = lobby.players.remove(&player) {
                     commands.entity(player_entity).despawn();
                 }
 
                 let message =
-                    bincode::serialize(&ServerMessage::PlayerDisconnected { id: *id }).unwrap();
-                server.broadcast_message(0, message);
+                    bincode::serialize(&ServerMessage::PlayerDisconnected { player }).unwrap();
+                server.broadcast_message(CONNECTION_EVENTS_CHANNEL, message);
             }
         }
     }
 
     // We move the players on the server side
     for client_id in server.clients_id().into_iter() {
-        while let Some(message) = server.receive_message(client_id, 0) {
+        let player = Player { id: client_id };
+        while let Some(message) = server.receive_message(client_id, PLAYER_POSITION_CHANNEL) {
             let player_input: PlayerInput = bincode::deserialize(&message).unwrap();
-            if let Some(player_entity) = lobby.players.get(&client_id) {
+            if let Some(player_entity) = lobby.players.get(&player) {
                 commands.entity(*player_entity).insert(player_input);
             }
         }
@@ -103,13 +106,13 @@ fn server_update_system(
 }
 
 fn server_sync_players(mut server: ResMut<RenetServer>, query: Query<(&Transform, &Player)>) {
-    let mut players: HashMap<u64, [f32; 3]> = HashMap::new();
+    let mut world = WorldSync::default();
     for (transform, player) in query.iter() {
-        players.insert(player.id, transform.translation.into());
+        world.players_positions.insert(*player, transform.translation.xy());
     }
 
-    let sync_message = bincode::serialize(&players).unwrap();
-    server.broadcast_message(1, sync_message);
+    let sync_message = bincode::serialize(&world).unwrap();
+    server.broadcast_message(WORLD_SYNC_CHANNEL, sync_message);
 }
 
 fn move_players_system(mut query: Query<(&mut Transform, &PlayerInput)>, time: Res<Time>) {
