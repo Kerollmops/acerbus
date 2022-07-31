@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub const PROTOCOL_ID: u64 = 7;
 
 pub const PLAYER_MOVE_SPEED: f32 = 100.0;
+pub const PLAYER_SQUARE_SIZE: f32 = 50.0;
 
 pub const PLAYER_POSITION_CHANNEL: u8 = 0;
 pub const CONNECTION_EVENTS_CHANNEL: u8 = 0;

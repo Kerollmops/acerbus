@@ -3,7 +3,10 @@ use std::time::{Duration, SystemTime};
 
 use acerbus_common::*;
 use bevy::app::AppExit;
+use bevy::asset::HandleId;
+use bevy::prelude::shape::Quad;
 use bevy::prelude::*;
+use bevy::sprite::{MaterialMesh2dBundle, Mesh2dHandle};
 use bevy_asset_loader::{AssetCollection, AssetCollectionApp};
 use bevy_renet::renet::{ClientAuthentication, RenetClient, RenetConnectionConfig};
 use bevy_renet::{run_if_client_conected, RenetClientPlugin};
@@ -69,15 +72,21 @@ fn client_sync_players(
     game_assets: Res<GameAssets>,
     mut client: ResMut<RenetClient>,
     mut lobby: ResMut<Lobby>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     while let Some(message) = client.receive_message(CONNECTION_EVENTS_CHANNEL) {
         let server_message = bincode::deserialize(&message).unwrap();
         match server_message {
             ServerMessage::PlayerConnected { player } => {
                 println!("{:?} connected.", player);
+
                 let player_entity = commands
-                    .spawn_bundle(SpriteBundle {
-                        texture: game_assets.icon_green.clone(),
+                    .spawn_bundle(MaterialMesh2dBundle {
+                        mesh: Mesh2dHandle(meshes.add(
+                            Quad::new(Vec2::new(PLAYER_SQUARE_SIZE, PLAYER_SQUARE_SIZE)).into(),
+                        )),
+                        material: materials.add(ColorMaterial::from(Color::PURPLE)),
                         ..default()
                     })
                     .id();

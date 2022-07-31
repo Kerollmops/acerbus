@@ -9,3 +9,4 @@ bevy = { version = "0.7.0" }
 bevy_renet = "0.0.4"
 bincode = "1.3.3"
 clap = { version = "3.2.16", features = ["derive"] }
+heron = { version = "3.1.0", features = ["2d"] }
