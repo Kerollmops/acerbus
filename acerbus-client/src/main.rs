@@ -84,7 +84,7 @@ fn client_sync_players(
                 let player_entity = commands
                     .spawn_bundle(MaterialMesh2dBundle {
                         mesh: Mesh2dHandle(meshes.add(
-                            Quad::new(Vec2::new(PLAYER_SQUARE_SIZE, PLAYER_SQUARE_SIZE)).into(),
+                            Quad::new(Vec2::new(PLAYER_SQUARE_WIDTH, PLAYER_SQUARE_HEIGHT)).into(),
                         )),
                         material: materials.add(ColorMaterial::from(Color::PURPLE)),
                         ..default()

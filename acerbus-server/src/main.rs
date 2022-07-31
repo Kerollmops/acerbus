@@ -120,7 +120,7 @@ fn spawn_player(commands: &mut Commands, player: Player) -> Entity {
         .insert(player)
         .insert(RigidBody::Dynamic)
         .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(PLAYER_SQUARE_SIZE / 2., PLAYER_SQUARE_SIZE / 2., 0.),
+            half_extends: Vec3::new(PLAYER_SQUARE_WIDTH / 2., PLAYER_SQUARE_HEIGHT / 2., 0.),
             border_radius: None,
         })
         .insert(Velocity::default())
