@@ -1,4 +1,4 @@
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, SystemTime};
 
 use acerbus_common::*;
@@ -9,8 +9,17 @@ use bevy_renet::renet::{
     RenetConnectionConfig, RenetServer, ServerAuthentication, ServerConfig, ServerEvent,
 };
 use bevy_renet::RenetServerPlugin;
+use clap::Parser;
+
+#[derive(Parser)]
+struct Opt {
+    #[clap(long, short, default_value = "127.0.0.1:5000")]
+    listen_addr: SocketAddr,
+}
 
 fn main() {
+    let opt = Opt::parse();
+
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
     app.insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(1.0 / 60.0)));
@@ -18,7 +27,7 @@ fn main() {
     app.insert_resource(Lobby::default());
 
     app.add_plugin(RenetServerPlugin);
-    app.insert_resource(new_renet_server());
+    app.insert_resource(new_renet_server(opt.listen_addr));
     app.add_system(server_update_system);
     app.add_system(server_sync_players);
     app.add_system(move_players_system);
@@ -31,12 +40,13 @@ fn main() {
 
 fn setup(_commands: Commands) {}
 
-fn new_renet_server() -> RenetServer {
-    let server_addr = "127.0.0.1:5000".parse().unwrap();
-    let socket = UdpSocket::bind(server_addr).unwrap();
+fn new_renet_server(listen_addr: SocketAddr) -> RenetServer {
+    let socket = UdpSocket::bind(listen_addr).unwrap();
+    info!("Listening on {:?}", socket);
+
     let connection_config = RenetConnectionConfig::default();
     let server_config =
-        ServerConfig::new(64, PROTOCOL_ID, server_addr, ServerAuthentication::Unsecure);
+        ServerConfig::new(64, PROTOCOL_ID, listen_addr, ServerAuthentication::Unsecure);
     let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
     RenetServer::new(current_time, server_config, connection_config, socket).unwrap()
 }

@@ -1,4 +1,4 @@
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, SystemTime};
 
 use acerbus_common::*;
@@ -7,23 +7,24 @@ use bevy::prelude::*;
 use bevy_asset_loader::{AssetCollection, AssetCollectionApp};
 use bevy_renet::renet::{ClientAuthentication, RenetClient, RenetConnectionConfig};
 use bevy_renet::{run_if_client_conected, RenetClientPlugin};
+use clap::Parser;
 
-#[derive(AssetCollection)]
-struct GameAssets {
-    #[asset(path = "images/icon-green.png")]
-    icon_green: Handle<Image>,
-    #[asset(path = "images/icon-purple.png")]
-    icon_purple: Handle<Image>,
+#[derive(Parser)]
+struct Opt {
+    #[clap(long, default_value = "127.0.0.1:5000")]
+    server_addr: SocketAddr,
 }
 
 fn main() {
+    let opt = Opt::parse();
+
     let mut app = App::new();
     app.add_plugins(DefaultPlugins);
     app.init_collection::<GameAssets>();
     app.insert_resource(Lobby::default());
 
     app.add_plugin(RenetClientPlugin);
-    app.insert_resource(new_renet_client());
+    app.insert_resource(new_renet_client(opt.server_addr));
     app.insert_resource(PlayerInput::default());
     app.add_system(player_input);
     app.add_system(client_send_input.with_run_criteria(run_if_client_conected));
@@ -39,9 +40,18 @@ fn main() {
     app.run();
 }
 
-fn new_renet_client() -> RenetClient {
-    let server_addr = "127.0.0.1:5000".parse().unwrap();
-    let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+#[derive(AssetCollection)]
+struct GameAssets {
+    #[asset(path = "images/icon-green.png")]
+    icon_green: Handle<Image>,
+    #[asset(path = "images/icon-purple.png")]
+    icon_purple: Handle<Image>,
+}
+
+fn new_renet_client(server_addr: SocketAddr) -> RenetClient {
+    let mut socket = server_addr.clone();
+    socket.set_port(0);
+    let socket = UdpSocket::bind(socket).unwrap();
     let connection_config = RenetConnectionConfig::default();
     let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
     let client_id = current_time.as_millis() as u64;
