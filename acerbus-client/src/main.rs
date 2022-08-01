@@ -3,7 +3,7 @@ use std::time::{Duration, SystemTime};
 
 use acerbus_common::*;
 use bevy::app::AppExit;
-use bevy::asset::HandleId;
+use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::shape::Quad;
 use bevy::prelude::*;
 use bevy::sprite::{MaterialMesh2dBundle, Mesh2dHandle};
@@ -30,6 +30,11 @@ fn main() {
     app.insert_resource(new_renet_client(opt.server_addr));
     app.insert_resource(PlayerInput::default());
     app.add_system(player_input);
+    app.add_system(
+        camera_follow_player
+            .with_run_criteria(run_if_client_conected)
+            .with_run_criteria(run_if_player_exist),
+    );
     app.add_system(client_send_input.with_run_criteria(run_if_client_conected));
     app.add_system(client_sync_players.with_run_criteria(run_if_client_conected));
 
@@ -89,6 +94,7 @@ fn client_sync_players(
                         material: materials.add(ColorMaterial::from(Color::PURPLE)),
                         ..default()
                     })
+                    .insert(player)
                     .id();
 
                 lobby.players.insert(player, player_entity);
@@ -130,6 +136,32 @@ fn player_input(keyboard_input: Res<Input<KeyCode>>, mut player_input: ResMut<Pl
 fn client_send_input(player_input: Res<PlayerInput>, mut client: ResMut<RenetClient>) {
     let input_message = bincode::serialize(&*player_input).unwrap();
     client.send_message(PLAYER_POSITION_CHANNEL, input_message);
+}
+
+fn camera_follow_player(
+    client: Res<RenetClient>,
+    lobby: Res<Lobby>,
+    transforms: Query<&Transform, (With<Player>, Without<Camera>)>,
+    mut cameras: Query<&mut Transform, (With<Camera>, Without<Player>)>,
+) {
+    let player = Player { id: client.client_id() };
+    let entity = lobby.players.get(&player).unwrap();
+    for mut cam_transform in cameras.iter_mut() {
+        cam_transform.translation = transforms.get(*entity).unwrap().translation;
+    }
+}
+
+fn run_if_player_exist(
+    client: Res<RenetClient>,
+    lobby: Res<Lobby>,
+    transforms: Query<&Transform, With<Player>>,
+) -> ShouldRun {
+    let player = Player { id: client.client_id() };
+    if lobby.players.get(&player).map_or(false, |id| transforms.get(*id).is_ok()) {
+        ShouldRun::Yes
+    } else {
+        ShouldRun::No
+    }
 }
 
 /// Close the connection with the server when exiting the app.
